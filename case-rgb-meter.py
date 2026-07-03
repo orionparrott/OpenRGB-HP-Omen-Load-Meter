@@ -54,9 +54,11 @@ def load_rgb(u, scale):
     return RGBColor(int(r * 255), int(g * 255), int(b * 255))
 
 
-def wave_rgb(t, speed):
-    """Wave: light blue <-> pink (hue sweep through violet), pastel."""
-    phase = 0.5 * (1.0 + math.sin(2.0 * math.pi * t * speed))  # 0..1
+def wave_rgb(t, speed, bias=3.0):
+    """Wave: blue-anchored with a brief pink 'activation'. bias>1 dwells on blue
+    (pink becomes a short peak); bias=1 is a symmetric 50/50 sweep."""
+    phase = 0.5 * (1.0 + math.sin(2.0 * math.pi * t * speed))  # 0..1 symmetric
+    phase = phase ** bias               # >1 -> more time near blue, brief pink peaks
     hue = 0.57 + 0.35 * phase           # 0.57 light blue .. 0.92 pink (via violet)
     sat = 0.55                          # pastel
     val = 0.85 + 0.15 * phase
@@ -79,7 +81,9 @@ def main():
     ap.add_argument("--gpu-zones", default="2")
     ap.add_argument("--cpu-zones", default="1")
     ap.add_argument("--wave-zones", default="0")
-    ap.add_argument("--wave-speed", type=float, default=0.66)
+    ap.add_argument("--wave-speed", type=float, default=0.5)
+    ap.add_argument("--wave-bias", type=float, default=3.0,
+                    help="wave duty bias; >1 dwells on the blue end, brief pink peak (1=50/50)")
     ap.add_argument("--scale", default="blue-red", choices=list(SCALES))
     ap.add_argument("--fps", type=float, default=15.0)
     ap.add_argument("--once", action="store_true")
@@ -130,7 +134,7 @@ def main():
 
         gpu_col = load_rgb(disp_gpu, args.scale)
         cpu_col = load_rgb(disp_cpu, args.scale)
-        wcol = wave_rgb(now, args.wave_speed)
+        wcol = wave_rgb(now, args.wave_speed, args.wave_bias)
         try:
             for i in wave_zones:
                 setz(i, wcol)
