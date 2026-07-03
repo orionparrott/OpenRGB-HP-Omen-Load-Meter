@@ -131,6 +131,34 @@ For lighting to run **before login / when logged out**: `sudo loginctl enable-li
   `soft-wave.py` for a real wave. **Color Cycle** works.
 - If the server ever starts with **0 devices**, restart it — detection can lose a startup race.
 
+## Hardware & parts
+
+The Omen 30L's RGB runs on a **proprietary HP lighting controller** (the "TracerLED" hub, USB
+`103c:84fd`) that OpenRGB drives as the "HP Omen 30L" device. Every RGB component — logo, fans,
+cooler — plugs into that hub, which exposes a **fixed set of zones** (7 on this build).
+
+Two things worth knowing before buying parts:
+1. **The driver's zone *names* don't match the physical parts, and your build may populate only
+   some of them.** Map your own hardware first with `identify-zones.py` / `zones-rainbow.py`
+   before trusting any zone→part assumption.
+2. **Aftermarket standard ARGB fans (3-pin 5V) do NOT fit the HP hub** and won't show up under
+   this OpenRGB device — they'd need a separate controller. Use OEM HP parts to stay integrated.
+
+**Part numbers are model- and configuration-specific** — 25L / 30L / 40L / 45L and the laptops all
+differ — so **look yours up on [HP PartSurfer](https://partsurfer.hp.com) with your serial
+number**, which returns the illustrated parts list for *your exact machine*. The numbers below are
+from *one* 30L GT13 (Intel) as **examples only**; verify yours on PartSurfer:
+
+| Part | Example HP P/N (30L GT13, Intel) |
+|---|---|
+| RGB Lighting Control Board (the hub) | `L97227-001` |
+| Front RGB fan, 120mm (`DF1202512B2UN`) | `L98992-001` |
+| RGB liquid cooler / AIO | `L89975-001` |
+
+**Expanding zones:** the 30L front is a 3-fan bay. If yours shipped with fewer fans, adding OEM
+`DF1202512B2UN` fans to the empty hub outputs lights them up as the corresponding zones with **no
+software change** — then just add those zone indices to `--gpu-zones` / `--cpu-zones`.
+
 ## Credits
 
 - [OpenRGB](https://openrgb.org) by Adam Honse — device control + the Omen 30L driver.
