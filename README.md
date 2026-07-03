@@ -35,7 +35,7 @@ several may be **unpopulated/unplugged** on any given build. On the reference ma
 | Zone # | OpenRGB name    | Actually is           |
 |--------|-----------------|-----------------------|
 | 0      | Omen Logo       | Omen logo ✅          |
-| 1      | Light Bar       | **top exhaust fan**   |
+| 1      | Light Bar       | top RGB light bar (name correct here) |
 | 2      | Front Fan       | front intake fan ✅   |
 | 3      | CPU Cooler      | *(not connected)*     |
 | 4–6    | Front B/M/T Fan | *(not connected)*     |
