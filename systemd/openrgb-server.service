@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenRGB SDK server (case lighting)
+After=graphical-session.target
+
+# __OPENRGB__ is filled in by install.sh (e.g. the OpenRGB AppImage path or `openrgb`).
+[Service]
+ExecStart=__OPENRGB__ --server --server-port 6742
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

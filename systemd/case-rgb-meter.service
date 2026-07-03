@@ -1,0 +1,15 @@
+[Unit]
+Description=Case RGB GPU/CPU load meter
+After=openrgb-server.service
+Requires=openrgb-server.service
+
+# __PY__ and __DIR__ are filled in by install.sh. Add your zone mapping to ExecStart, e.g.:
+#   ExecStart=__PY__ __DIR__/case-rgb-meter.py --gpu-zones 2 --cpu-zones 1 --wave-zones 0
+[Service]
+ExecStartPre=/bin/sleep 3
+ExecStart=__PY__ __DIR__/case-rgb-meter.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
