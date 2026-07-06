@@ -1,19 +1,25 @@
 # OpenRGB HP Omen Load Meter
 
-Turn the case lighting on an **HP OMEN 30L** desktop into a live **GPU/CPU load meter** on
-Linux, driven by [OpenRGB](https://openrgb.org). The front fan glows with GPU load, the
-exhaust fan with CPU load (a smooth blue→red "cold→hot" thermal gradient), and the Omen logo
-runs an animated color wave. Runs headless as a `systemd --user` service — no sudo, auto-starts
-at login.
+Turn the case lighting on an **HP OMEN 30L** desktop into a live **GPU/CPU meter** on
+Linux, driven by [OpenRGB](https://openrgb.org). The front fan glows with the GPU, the
+top light bar with the CPU (a smooth blue→red "cold→hot" gradient), and the Omen logo
+runs an animated color wave. By default the zones track **temperature** — thermal mass gives a
+smooth glide instead of the bang-bang of instantaneous load — or flip either zone to
+utilization/load with one flag. Runs headless as a `systemd --user` service — no sudo,
+auto-starts at login.
 
 Built as a set of small, hackable Python scripts on top of the OpenRGB SDK. Should adapt to
 other OpenRGB-supported gear with minor edits.
 
 ## What it does
 
-- **Front intake fan → GPU utilization**, **top exhaust fan → CPU utilization.**
-- **Thermal color scale:** 0% = cool blue → magenta → 100% = hot red (no Christmassy green/red
-  clash). Other scales included (`green-red`, `cyan-magenta`, `amber-red`).
+- **Front intake fan → GPU, top light bar → CPU.** Each zone is driven by **temperature by
+  default** (`coretemp` package temp for CPU, `nvidia-smi` for GPU); thermal mass makes the
+  color glide smoothly instead of snapping. Switch a zone back to instantaneous
+  **utilization/load** with `--cpu-metric load` / `--gpu-metric util`.
+- **Thermal color scale:** cool blue → magenta → hot red (no Christmassy green/red clash).
+  Other scales included (`green-red`, `cyan-magenta`, `amber-red`). In temp mode the scale
+  spans `--cpu-temp-min…max` °C (default 40→85).
 - **Omen logo → animated wave** (configurable color range + speed).
 - **Temporally smoothed:** colors *ease* between values (exponential filter) instead of
   snapping, so spiky GPU load reads as a gentle glide, not flicker. Color is continuous 24-bit
@@ -47,14 +53,14 @@ drive which physical parts on *your* case, then set `--gpu-zones` / `--cpu-zones
 ## How it works
 
 ```
-nvidia-smi + /proc/stat  ──►  case-rgb-meter.py  ──(OpenRGB SDK, localhost:6742)──►  OpenRGB server  ──►  /dev/hidraw0 (TracerLED)
-        (load %)              (map load→color,                                       (headless, holds
+coretemp + nvidia-smi    ──►  case-rgb-meter.py  ──(OpenRGB SDK, localhost:6742)──►  OpenRGB server  ──►  /dev/hidraw0 (TracerLED)
+ (temp °C, or load %)         (map value→color,                                      (headless, holds
                               ease, per-zone)                                         the device)
 ```
 
 - `openrgb --server` runs headless and owns the HID device.
 - `case-rgb-meter.py` (a [`openrgb-python`](https://github.com/jath03/openrgb-python) client)
-  reads load, maps to colors, eases them, and pushes per-zone updates ~15×/sec.
+  reads temperature (or load), maps to colors, eases them, and pushes per-zone updates ~15×/sec.
 - Two `systemd --user` services (`systemd/`) run the server + meter and auto-start at login.
 - Access to `/dev/hidraw0` comes from OpenRGB's udev rule (`uaccess` / `plugdev`) — **no sudo
   at runtime.**
@@ -103,14 +109,18 @@ All scripts talk to the running OpenRGB server on `localhost:6742`.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--gpu-zones` | `2` | zone indices showing GPU load |
-| `--cpu-zones` | `1` | zone indices showing CPU load |
+| `--gpu-zones` | `2` | zone indices for the GPU zone(s) |
+| `--cpu-zones` | `1` | zone indices for the CPU zone(s) |
 | `--wave-zones`| `0` | zone indices running the animated wave |
+| `--cpu-metric` | `temp` | `temp` (smooth, `coretemp` package °C) or `load` (instantaneous %) |
+| `--gpu-metric` | `temp` | `temp` (smooth, `nvidia-smi` °C) or `util` (instantaneous %) |
+| `--cpu-temp-min` / `--cpu-temp-max` | `40` / `85` | °C mapped to color 0%…100% (CPU temp mode) |
+| `--gpu-temp-min` / `--gpu-temp-max` | `40` / `85` | °C mapped to color 0%…100% (GPU temp mode) |
 | `--scale` | `blue-red` | `blue-red`, `green-red`, `cyan-magenta`, `amber-red` |
 | `--wave-speed` | `0.66` | logo wave frequency (Hz) |
 | `--smooth` | `0.6` | color easing time constant (s); higher = dreamier |
-| `--interval` | `0.5` | seconds between load re-reads |
-| `--mono` | off | drive all mapped zones from GPU load only |
+| `--interval` | `0.5` | seconds between sensor re-reads |
+| `--mono` | off | drive all mapped zones from GPU only |
 
 Edit `wave_rgb()` to change the wave's colors (it's a plain HSV sweep).
 
@@ -130,6 +140,9 @@ For lighting to run **before login / when logged out**: `sudo loginctl enable-li
 - On this hardware the **Wave/Radial** built-in modes don't animate (only ~discrete zones); use
   `soft-wave.py` for a real wave. **Color Cycle** works.
 - If the server ever starts with **0 devices**, restart it — detection can lose a startup race.
+- **Fan RPM isn't a usable signal** on this box — the `hp` hwmon reports `fan1=0 fan2=0` (the EC
+  doesn't expose real RPM to Linux without a vendor `omen` module), so temperature is the smooth
+  driver of choice.
 
 ## Hardware & parts
 
