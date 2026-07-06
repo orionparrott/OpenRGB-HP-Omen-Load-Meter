@@ -15,7 +15,9 @@ re-read once per --interval.
 """
 import argparse
 import colorsys
+import glob
 import math
+import os
 import subprocess
 import sys
 import time
@@ -45,6 +47,38 @@ def read_cpu():
         v = list(map(int, f.readline().split()[1:]))
     idle = v[3] + (v[4] if len(v) > 4 else 0)
     return sum(v), idle
+
+
+def read_cpu_temp():
+    """CPU package temperature (°C). Prefers coretemp 'Package id 0'; falls back
+    to thermal_zone0. Smooth by nature (thermal mass) vs bang-bang load%."""
+    for base in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
+        try:
+            if open(os.path.join(base, "name")).read().strip() == "coretemp":
+                p = os.path.join(base, "temp1_input")  # Package id 0
+                if os.path.exists(p):
+                    return int(open(p).read()) / 1000.0
+        except OSError:
+            continue
+    try:
+        return int(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000.0
+    except OSError:
+        return 0.0
+
+
+def gpu_temp():
+    out = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=temperature.gpu",
+         "--format=csv,noheader,nounits"], text=True)
+    vals = [int(x) for x in out.split() if x.strip().isdigit()]
+    return max(vals) if vals else 0
+
+
+def pct_from_range(v, lo, hi):
+    """Map a value in [lo, hi] °C to 0..100 (clamped)."""
+    if hi <= lo:
+        return 0.0
+    return max(0.0, min(100.0, 100.0 * (v - lo) / (hi - lo)))
 
 
 def load_rgb(u, scale):
@@ -85,6 +119,14 @@ def main():
     ap.add_argument("--wave-bias", type=float, default=3.0,
                     help="wave duty bias; >1 dwells on the blue end, brief pink peak (1=50/50)")
     ap.add_argument("--scale", default="blue-red", choices=list(SCALES))
+    ap.add_argument("--cpu-metric", choices=["temp", "load"], default="temp",
+                    help="drive CPU zone by package temp (smooth, default) or load%% (bang-bang)")
+    ap.add_argument("--cpu-temp-min", type=float, default=40.0, help="°C mapped to color 0%%")
+    ap.add_argument("--cpu-temp-max", type=float, default=85.0, help="°C mapped to color 100%%")
+    ap.add_argument("--gpu-metric", choices=["temp", "util"], default="temp",
+                    help="drive GPU zone by temp (smooth, default) or utilization%%")
+    ap.add_argument("--gpu-temp-min", type=float, default=40.0)
+    ap.add_argument("--gpu-temp-max", type=float, default=85.0)
     ap.add_argument("--fps", type=float, default=15.0)
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
@@ -116,13 +158,25 @@ def main():
         now = time.time() - t0
         if now - last_read >= args.interval:
             try:
-                tgt_gpu = float(gpu_util())
-                total, idle = read_cpu()
-                dt, di = total - prev_total, idle - prev_idle
-                prev_total, prev_idle = total, idle
-                tgt_cpu = max(0.0, min(100.0, 100.0 * (dt - di) / dt)) if dt > 0 else 0.0
-                print(f"[{args.scale}] GPU {tgt_gpu:5.1f}% -> z{gpu_zones}   "
-                      f"CPU {tgt_cpu:5.1f}% -> z{cpu_zones}   wave z{wave_zones}", flush=True)
+                if args.gpu_metric == "temp":
+                    gval = gpu_temp()
+                    tgt_gpu = pct_from_range(gval, args.gpu_temp_min, args.gpu_temp_max)
+                    gpu_str = f"GPU {gval:4.0f}C"
+                else:
+                    tgt_gpu = float(gpu_util())
+                    gpu_str = f"GPU {tgt_gpu:5.1f}%"
+                if args.cpu_metric == "temp":
+                    cval = read_cpu_temp()
+                    tgt_cpu = pct_from_range(cval, args.cpu_temp_min, args.cpu_temp_max)
+                    cpu_str = f"CPU {cval:4.0f}C"
+                else:
+                    total, idle = read_cpu()
+                    dt, di = total - prev_total, idle - prev_idle
+                    prev_total, prev_idle = total, idle
+                    tgt_cpu = max(0.0, min(100.0, 100.0 * (dt - di) / dt)) if dt > 0 else 0.0
+                    cpu_str = f"CPU {tgt_cpu:5.1f}%"
+                print(f"[{args.scale}] {gpu_str}->{tgt_gpu:3.0f}%  z{gpu_zones}   "
+                      f"{cpu_str}->{tgt_cpu:3.0f}%  z{cpu_zones}   wave z{wave_zones}", flush=True)
             except Exception as e:
                 sys.stderr.write(f"read error: {e}\n")
             last_read = now
