@@ -135,7 +135,26 @@ def main():
     cpu_zones = parse_zones(args.cpu_zones)
     wave_zones = parse_zones(args.wave_zones)
 
+    # Root cause (2026-10-16): on a cold boot, openrgb-server.service's own ONE-TIME
+    # device detection sometimes comes up with zero devices (a boot-time race against
+    # USB/hidraw enumeration and the session's uaccess ACL grant), even though the
+    # server process itself stays up and "healthy" from systemd's point of view --
+    # it never crashes, so systemd's own Restart=on-failure never catches it. Only
+    # restarting openrgb-server.service (not this script) re-runs its detection and
+    # fixes it. This script used to crash immediately on an empty device list, and
+    # systemd restarting THIS script every 3s for 25+ minutes did nothing, since the
+    # server's stale (empty) detection result never changed. Now it detects that
+    # specific case and restarts the server itself before retrying.
     client = OpenRGBClient(args.host, args.port, name="case-meter")
+    for attempt in range(10):
+        if len(client.devices) > args.device:
+            break
+        print(f"case-rgb-meter: openrgb-server reports {len(client.devices)} device(s) "
+              f"(need index {args.device}), attempt {attempt + 1}/10; "
+              "restarting openrgb-server.service and retrying", file=sys.stderr)
+        subprocess.run(["systemctl", "--user", "restart", "openrgb-server.service"])
+        time.sleep(3)
+        client = OpenRGBClient(args.host, args.port, name="case-meter")
     dev = client.devices[args.device]
     try:
         dev.set_mode("Direct")
